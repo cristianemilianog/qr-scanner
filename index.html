@@ -1,48 +1,83 @@
-
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
+  <meta charset="UTF-8">
   <title>Escáner QR</title>
   <script src="https://rawgit.com/schmich/instascan-builds/master/instascan.min.js"></script>
   <style>
-    body { font-family: Arial; padding: 20px; text-align: center; }
-    video { width: 100%; max-width: 400px; border: 2px solid #ccc; border-radius: 10px; }
-    p { margin-top: 20px; font-weight: bold; }
+    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; }
+    video { width: 100%; max-width: 400px; border: 2px solid #ccc; border-radius: 10px; margin-bottom: 15px; }
+    input, button {
+      font-size: 1rem;
+      padding: 10px;
+      width: 80%;
+      max-width: 400px;
+      margin: 10px auto;
+      display: block;
+    }
+    button { background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background-color: #218838; }
+    #status { margin-top: 20px; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <h2>Escanea un código QR</h2>
+  <h2>Escáner QR con botón de envío</h2>
   <video id="preview"></video>
-  <p id="output">Esperando escaneo...</p>
+
+  <input type="text" id="qrContent" placeholder="Esperando escaneo..." readonly />
+  <button id="sendButton">📤 ENVIAR A GOOGLE SHEET</button>
+
+  <p id="status">Esperando escaneo...</p>
 
   <script>
-    const sheetUrl = "https://script.google.com/macros/s/AKfycbzAjXQlSY5gHQG3gxxsaitJ8Q7r9mn5jCLtxTYYZQ9FR5ScZ3QZSbS3fZyCV1CqHwm2ww/exec"; // <--- reemplazar con tu URL
+    const sheetUrl = "https://script.google.com/macros/s/AKfycbzAjXQlSY5gHQG3gxxsaitJ8Q7r9mn5jCLtxTYYZQ9FR5ScZ3QZSbS3fZyCV1CqHwm2ww/exec";
 
-    let scanner = new Instascan.Scanner({ video: document.getElementById('preview') });
+    let qrScanned = "";
+
+    const scanner = new Instascan.Scanner({ video: document.getElementById('preview') });
     scanner.addListener('scan', function (content) {
-      document.getElementById("output").textContent = "Código escaneado: " + content;
+      qrScanned = content;
+      document.getElementById("qrContent").value = content;
+      document.getElementById("status").textContent = "Código escaneado. Presiona ENVIAR para registrar.";
+    });
+
+    Instascan.Camera.getCameras().then(function (cameras) {
+      // Buscar cámara trasera (back) si está disponible
+      let backCamera = cameras.find(cam => cam.name.toLowerCase().includes('back')) || cameras[0];
+      if (backCamera) {
+        scanner.start(backCamera);
+      } else {
+        alert('No se encontró una cámara disponible.');
+      }
+    }).catch(function (e) {
+      console.error(e);
+    });
+
+    document.getElementById("sendButton").addEventListener("click", function () {
+      if (!qrScanned) {
+        document.getElementById("status").textContent = "⚠️ No hay contenido escaneado.";
+        return;
+      }
+
+      const now = new Date().toLocaleString(); // Fecha y hora local
 
       fetch(sheetUrl, {
         method: "POST",
         mode: "no-cors",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ qrData: content })
+        body: JSON.stringify({
+          qrData: qrScanned,
+          dateTime: now
+        })
       }).then(() => {
-        console.log("Datos enviados a Google Sheet.");
+        document.getElementById("status").textContent = "✅ Enviado correctamente.";
+        document.getElementById("qrContent").value = "";
+        qrScanned = "";
       }).catch(err => {
         console.error("Error al enviar", err);
+        document.getElementById("status").textContent = "❌ Error al enviar los datos.";
       });
-    });
-
-    Instascan.Camera.getCameras().then(function (cameras) {
-      if (cameras.length > 0) {
-        scanner.start(cameras[0]);
-      } else {
-        alert('No se encontró una cámara.');
-      }
-    }).catch(function (e) {
-      console.error(e);
     });
   </script>
 </body>
